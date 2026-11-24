@@ -3,6 +3,7 @@
  * The SDK is loaded lazily so it never weighs down the rest of the app.
  */
 import type Anthropic from '@anthropic-ai/sdk';
+import { IS_ARTIFACT, getHost, sampleErrorMessage } from './host';
 
 export const AI_MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', hint: 'Best quality (default)' },
@@ -57,6 +58,11 @@ export interface ChatTurn {
 }
 
 /** Stream a chat completion. Calls onText with each text delta. Returns the full text. */
+/** In the claude.ai preview build, Claude answers through the viewer's built-in `sample` capability. */
+function builtin() {
+  return IS_ARTIFACT ? getHost().sample : null;
+}
+
 export async function streamChat(opts: {
   apiKey: string;
   model: string;
@@ -64,7 +70,22 @@ export async function streamChat(opts: {
   messages: ChatTurn[];
   onText: (delta: string) => void;
   signal?: AbortSignal;
+  tier?: 'quick' | 'default';
 }): Promise<string> {
+  const sample = builtin();
+  if (sample) {
+    try {
+      const turns = [
+        { role: 'user' as const, content: `INSTRUCTIONS — follow these for the whole conversation:\n${opts.system}` },
+        ...opts.messages.map((m) => ({ role: m.role, content: m.content })),
+      ];
+      const r = await sample(turns, { cache: false, signal: opts.signal, modelTier: opts.tier ?? 'quick', onText: ({ delta }) => opts.onText(delta) });
+      return r.text;
+    } catch (e) {
+      const m = sampleErrorMessage(e);
+      throw new AiError(m.message, m.kind);
+    }
+  }
   try {
     const c = await client(opts.apiKey);
     const stream = c.beta.messages.stream(
@@ -102,7 +123,21 @@ async function jsonCall<T>(opts: {
   content: Anthropic.Beta.BetaContentBlockParam[] | string;
   schema: Record<string, unknown>;
   signal?: AbortSignal;
+  image?: Blob;
+  tier?: 'quick' | 'default';
 }): Promise<T> {
+  const sample = builtin();
+  if (sample) {
+    const text = typeof opts.content === 'string' ? opts.content : opts.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n');
+    const prompt =
+      `${opts.system}\n\nReply with ONLY a JSON object matching this JSON Schema (no prose, no code fence):\n${JSON.stringify(opts.schema)}\n\n${text}`;
+    try {
+      return await sample.json<T>(prompt, { signal: opts.signal, modelTier: opts.tier ?? 'quick', images: opts.image });
+    } catch (e) {
+      const m = sampleErrorMessage(e);
+      throw new AiError(m.message, m.kind);
+    }
+  }
   try {
     const c = await client(opts.apiKey);
     const res = await c.beta.messages.create(
@@ -188,12 +223,15 @@ export function aiReadImage(opts: {
   model: string;
   base64: string;
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+  blob?: Blob;
   signal?: AbortSignal;
 }): Promise<VisionResult> {
   return jsonCall<VisionResult>({
     apiKey: opts.apiKey,
     model: opts.model,
     signal: opts.signal,
+    image: opts.blob,
+    tier: 'default',
     schema: {
       type: 'object',
       properties: {

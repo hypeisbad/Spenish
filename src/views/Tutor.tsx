@@ -6,6 +6,7 @@ import { useStore } from '../lib/store';
 import { streamChat, tutorSystem, parseTutorReply, AI_MODELS, type ChatTurn } from '../lib/ai';
 import { SCENARIOS, SCENARIO_MAP } from '../data/scenarios';
 import { toast } from '../lib/events';
+import { IS_ARTIFACT, useAiAvailable, useHost } from '../lib/host';
 import { AccentBar, MicButton, PageHead, SpeakButton, SaveButton, TapText, say } from '../components/ui';
 import { RichText } from '../components/RichText';
 
@@ -77,7 +78,8 @@ export default function Tutor({ route }: { route: Route }) {
   const abort = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const hasKey = !!settings.aiKey;
+  const hasKey = useAiAvailable(settings.aiKey);
+  const host = useHost();
 
   useEffect(() => {
     // scrollIntoView may return a Promise in newer browsers — never return it from an effect
@@ -111,6 +113,7 @@ export default function Tutor({ route }: { route: Route }) {
         system: system(),
         messages: history,
         signal: ctrl.signal,
+        tier: mode === 'explain' || mode === 'correct' ? 'default' : 'quick',
         onText: (d) =>
           setMsgs((cur) => {
             const copy = cur.slice();
@@ -159,7 +162,17 @@ export default function Tutor({ route }: { route: Route }) {
     return (
       <div className="page">
         <PageHead eyebrow="Profe IA · AI tutor" es="Tu maestra personal" en="Your personal tutor" />
-        <KeySetup />
+        {IS_ARTIFACT ? (
+          <div className="card hero">
+            {host.ready ? (
+              <div className="soft">👩‍🏫 Profe Lupita needs Claude, which isn’t available in this view. The offline role-plays below work anywhere.</div>
+            ) : (
+              <div className="soft">Conectando con Claude…</div>
+            )}
+          </div>
+        ) : (
+          <KeySetup />
+        )}
         <div className="nav-group" style={{ paddingLeft: 2, marginTop: 24 }}>Mientras tanto · Offline role-plays (no key needed)</div>
         <ScenarioGrid onPick={(id) => navigate(`/scenario/${id}`)} />
       </div>
@@ -180,9 +193,11 @@ export default function Tutor({ route }: { route: Route }) {
             <select className="select" style={{ width: 'auto', height: 40, padding: '0 34px 0 12px' }} value={level} onChange={(e) => setLevel(e.target.value)} aria-label="Your level">
               {['A1', 'A2', 'B1', 'B2', 'C1'].map((l) => <option key={l} value={l}>Nivel {l}</option>)}
             </select>
-            <select className="select" style={{ width: 'auto', height: 40, padding: '0 34px 0 12px' }} value={settings.aiModel} onChange={(e) => setSettings({ aiModel: e.target.value })} aria-label="Model">
-              {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
+            {!IS_ARTIFACT && (
+              <select className="select" style={{ width: 'auto', height: 40, padding: '0 34px 0 12px' }} value={settings.aiModel} onChange={(e) => setSettings({ aiModel: e.target.value })} aria-label="Model">
+                {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            )}
           </div>
         }
       />
@@ -203,7 +218,7 @@ export default function Tutor({ route }: { route: Route }) {
               <span style={{ fontSize: 28 }}>{scenarioId ? SCENARIO_MAP[scenarioId].whoEmoji : '👩‍🏫'}</span>
               <div>
                 <b>{scenarioId ? SCENARIO_MAP[scenarioId].who : 'Profe Lupita'}</b>
-                <div className="tiny muted">{scenarioId ? SCENARIO_MAP[scenarioId].setting : `${MODES.find((m) => m.id === mode)?.en} · ${AI_MODELS.find((m) => m.id === settings.aiModel)?.label ?? settings.aiModel}`}</div>
+                <div className="tiny muted">{scenarioId ? SCENARIO_MAP[scenarioId].setting : `${MODES.find((m) => m.id === mode)?.en} · ${IS_ARTIFACT ? 'Claude' : AI_MODELS.find((m) => m.id === settings.aiModel)?.label ?? settings.aiModel}`}</div>
               </div>
             </div>
             <div className="row">

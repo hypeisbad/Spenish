@@ -1,5 +1,6 @@
 /** Text-to-speech (Mexican Spanish voices preferred) and speech recognition. */
 import { sentences } from './text';
+import { IS_ARTIFACT, getHost } from './host';
 
 export type Lang = 'es' | 'en';
 
@@ -184,6 +185,7 @@ function RecognitionCtor(): (new () => RecognitionLike) | null {
 }
 
 export function sttSupported(): boolean {
+  if (IS_ARTIFACT) return !!getHost().dictation;
   return !!RecognitionCtor();
 }
 
@@ -204,8 +206,78 @@ const ERRORS: Record<string, string> = {
   aborted: '',
 };
 
+const DICTATION_ERRORS: Record<string, string> = {
+  not_granted: 'Dictation is turned off for this page. You can allow it from the page’s Permissions menu.',
+  unavailable: 'Dictation isn’t available here (it works in Chrome and the Claude desktop app). You can type instead.',
+  rate_limited: 'Dictation is busy — try again in a moment.',
+  upstream_error: 'The microphone or speech service failed. Try again.',
+  no_gesture: 'Tap the microphone button to start dictation.',
+};
+
+/** Preview build: speech-to-text through the viewer's dictation capability. */
+function listenDictation(lang: Lang, h: ListenHandlers, continuous: boolean): () => void {
+  const d = getHost().dictation;
+  if (!d) {
+    h.onError?.(DICTATION_ERRORS.unavailable);
+    h.onEnd?.();
+    return () => {};
+  }
+  let finalText = '';
+  let silence: ReturnType<typeof setTimeout> | undefined;
+  let ended = false;
+  const offs: (() => void)[] = [];
+  const cleanup = () => {
+    if (silence) clearTimeout(silence);
+    offs.forEach((o) => o());
+  };
+  // Dictation keeps listening until stopped; emulate one utterance by stopping after a pause.
+  const armSilence = () => {
+    if (continuous) return;
+    if (silence) clearTimeout(silence);
+    silence = setTimeout(() => void d.stop().catch(() => undefined), 1400);
+  };
+  offs.push(d.onPartial(({ text }) => {
+    if (text) armSilence();
+    h.onInterim?.(`${finalText} ${text}`.trim());
+  }));
+  offs.push(d.onFinal(({ text }) => {
+    finalText = (finalText + text).trim();
+    h.onInterim?.(finalText);
+    if (continuous) h.onFinal?.(text.trim(), 1);
+    armSilence();
+  }));
+  offs.push(d.onState(({ state, reason }) => {
+    if (state === 'listening') h.onStart?.();
+    if (state === 'idle' && !ended) {
+      ended = true;
+      cleanup();
+      if (!continuous && finalText) h.onFinal?.(finalText, 1);
+      if (reason && DICTATION_ERRORS[reason] && !finalText) h.onError?.(DICTATION_ERRORS[reason]);
+      h.onEnd?.();
+    }
+  }));
+  // must run synchronously inside the viewer's click
+  d.start({ language: lang }).catch((e: { code?: string }) => {
+    if (e?.code && e.code !== 'stopped' && e.code !== 'dismissed' && !ended) {
+      h.onError?.(DICTATION_ERRORS[e.code] ?? 'Dictation could not start.');
+    }
+    if (!ended) {
+      ended = true;
+      cleanup();
+      h.onEnd?.();
+    }
+  });
+  return () => {
+    void d.stop().catch(() => undefined);
+  };
+}
+
 /** Start listening. Returns a stop function. */
 export function listen(lang: Lang, h: ListenHandlers, continuous = false): () => void {
+  if (IS_ARTIFACT) {
+    stopSpeaking();
+    return listenDictation(lang, h, continuous);
+  }
   const Ctor = RecognitionCtor();
   if (!Ctor) {
     h.onError?.('Speech recognition isn’t supported in this browser. Try Chrome, Edge or Safari.');

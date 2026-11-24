@@ -7,7 +7,7 @@ import { setSoundEnabled } from './lib/sound';
 import { emit } from './lib/events';
 import { dueCards } from './lib/srs';
 import { NAV, activeNav } from './components/nav';
-import { Toaster, Confetti, LevelUp } from './components/Effects';
+import { Toaster, Confetti, LevelUp, ConfirmHost } from './components/Effects';
 import { CommandPalette } from './components/CommandPalette';
 import { Modal, CloseButton } from './components/ui';
 import { Onboarding } from './views/Onboarding';
@@ -251,6 +251,7 @@ export default function App() {
       <Toaster />
       <Confetti />
       <LevelUp />
+      <ConfirmHost />
       {!onboarded && <Onboarding />}
     </>
   );

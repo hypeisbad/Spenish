@@ -133,9 +133,9 @@ img, svg { display: block; }
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .main { padding: calc(var(--topbar) + 14px) 16px calc(var(--bottombar) + 28px + env(safe-area-inset-bottom)); }
+  .main { padding: calc(var(--topbar) + env(safe-area-inset-top, 0px) + 14px) 16px calc(var(--bottombar) + 28px + env(safe-area-inset-bottom)); }
   .topbar {
-    display: flex; position: fixed; z-index: 40; top: 0; left: 0; right: 0; height: var(--topbar); padding: 0 14px;
+    display: flex; position: fixed; z-index: 40; top: 0; left: 0; right: 0; height: calc(var(--topbar) + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 14px 0;
     align-items: center; gap: 10px; background: rgba(9, 8, 18, 0.78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
     border-bottom: 1px solid var(--line);
   }

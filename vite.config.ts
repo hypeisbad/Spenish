@@ -72,16 +72,28 @@ self.addEventListener('fetch', (event) => {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: './',
-  plugins: [react(), serviceWorker()],
-  build: {
-    target: 'es2020',
-    sourcemap: false,
-    chunkSizeWarningLimit: 900,
-  },
+  plugins: mode === 'artifact' ? [react()] : [react(), serviceWorker()],
+  build:
+    mode === 'artifact'
+      ? {
+          // claude.ai preview: one self-contained page (scripts/build-artifact.mjs inlines it)
+          target: 'es2020',
+          outDir: 'dist-artifact',
+          assetsInlineLimit: 100_000_000,
+          cssCodeSplit: false,
+          modulePreload: false,
+          chunkSizeWarningLimit: 4000,
+          rollupOptions: { output: { inlineDynamicImports: true } },
+        }
+      : {
+          target: 'es2020',
+          sourcemap: false,
+          chunkSizeWarningLimit: 900,
+        },
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
   },
-});
+}));

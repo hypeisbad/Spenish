@@ -6,6 +6,7 @@ import { SCENARIO_MAP, type ScenarioOption } from '../data/scenarios';
 import { similarity, normalize } from '../lib/text';
 import { useStore } from '../lib/store';
 import { emit, toast } from '../lib/events';
+import { useAiAvailable } from '../lib/host';
 import { sfx } from '../lib/sound';
 import { Empty, MicButton, SpeakButton, say } from '../components/ui';
 
@@ -26,6 +27,7 @@ export default function Scenario({ route }: { route: Route }) {
   const [showEn, setShowEn] = useState(false);
   const [score, setScore] = useState({ good: 0, total: 0 });
   const [heard, setHeard] = useState('');
+  const aiOn = useAiAvailable(settings.aiKey);
   const endRef = useRef<HTMLDivElement>(null);
   const finished = useRef(false);
 
@@ -125,7 +127,7 @@ export default function Scenario({ route }: { route: Route }) {
             <div className="soft">{score.good}/{score.total} respuestas naturales</div>
             <div className="row" style={{ justifyContent: 'center' }}>
               <button className="btn" onClick={restart}><RotateCcw /> Otra vez</button>
-              {settings.aiKey && <button className="btn primary" onClick={() => navigate(`/tutor?scenario=${sc.id}`)}><Sparkles /> Versión libre con IA</button>}
+              {aiOn && <button className="btn primary" onClick={() => navigate(`/tutor?scenario=${sc.id}`)}><Sparkles /> Versión libre con IA</button>}
               <button className="btn" onClick={() => navigate('/tutor')}>Más escenas</button>
             </div>
           </div>

@@ -7,7 +7,8 @@ import { useStore } from '../lib/store';
 import { translate, mexicanHints, PROVIDER_LABEL, type TranslateResult } from '../lib/translate';
 import { detectLanguage, normalize, stripDiacritics } from '../lib/text';
 import { SLANG } from '../data/slang';
-import { toast } from '../lib/events';
+import { toast, askConfirm } from '../lib/events';
+import { IS_ARTIFACT, aiAvailable, useAiAvailable } from '../lib/host';
 import { sfx } from '../lib/sound';
 import { AccentBar, Bi, Flag, MicButton, PageHead, SaveButton, SpeakButton, Spice, TapText, say } from '../components/ui';
 
@@ -46,7 +47,8 @@ export default function Translate({ route }: { route: Route }) {
   const lastRun = useRef('');
 
   const srcLang: 'es' | 'en' = dir === 'auto' ? (text.trim() ? detectLanguage(text) : 'en') : dir;
-  const usingAi = !!settings.aiKey && (settings.engine === 'ai' || settings.engine === 'auto');
+  const aiOn = useAiAvailable(settings.aiKey);
+  const usingAi = aiOn && (settings.engine === 'ai' || settings.engine === 'auto');
 
   const run = useCallback(
     async (input = text, opts: { speakOut?: boolean } = {}) => {
@@ -148,11 +150,11 @@ export default function Translate({ route }: { route: Route }) {
   const share = async () => {
     if (!result) return;
     const body = `${text.trim()}\n→ ${result.text}`;
-    if (navigator.share) {
+    if (navigator.share && !IS_ARTIFACT) {
       try {
         await navigator.share({ text: body, title: 'Spenish' });
-      } catch {
-        /* cancelled */
+      } catch (e) {
+        if (!(e instanceof DOMException && e.name === 'AbortError')) void copy(body);
       }
     } else void copy(body);
   };
@@ -182,8 +184,8 @@ export default function Translate({ route }: { route: Route }) {
                 aria-checked={settings.engine === e}
                 className={settings.engine === e ? 'on' : ''}
                 onClick={() => {
-                  if (e === 'ai' && !settings.aiKey) {
-                    toast('Add your Claude API key in Settings → AI to use AI translation.', '🔑', 'info');
+                  if (e === 'ai' && !aiAvailable(settings.aiKey)) {
+                    toast(IS_ARTIFACT ? 'Claude isn’t available in this view.' : 'Add your Claude API key in Settings → AI to use AI translation.', '🔑', 'info');
                   }
                   setSettings({ engine: e });
                 }}
@@ -243,7 +245,7 @@ export default function Translate({ route }: { route: Route }) {
                 />
               ))}
               {text && <SpeakButton text={text} lang={srcLang} />}
-              <button className="btn icon sm ghost" onClick={paste} aria-label="Paste" title="Paste"><ClipboardPaste /></button>
+              {!IS_ARTIFACT && <button className="btn icon sm ghost" onClick={paste} aria-label="Paste" title="Paste"><ClipboardPaste /></button>}
               {text && <button className="btn icon sm ghost" onClick={() => { setText(''); setResult(null); setError(null); setBack(null); inputRef.current?.focus(); }} aria-label="Clear" title="Clear"><X /></button>}
             </div>
             <div className="row">
@@ -390,7 +392,7 @@ export default function Translate({ route }: { route: Route }) {
             <button className={tab === 'favorites' ? 'on' : ''} onClick={() => setTab('favorites')}><Star /> Favoritos ({favList.length})</button>
           </div>
           {tab === 'history' && history.length > 0 && (
-            <button className="btn sm ghost" onClick={() => { if (confirm('Clear translation history?')) clearHistory(); }}><Trash2 /> Borrar</button>
+            <button className="btn sm ghost" onClick={async () => { if (await askConfirm('¿Borrar el historial?', { detail: 'Clear all translation history on this device.', ok: 'Borrar', danger: true })) clearHistory(); }}><Trash2 /> Borrar</button>
           )}
         </div>
         <div className="list mt">

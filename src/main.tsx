@@ -4,6 +4,9 @@ import '@fontsource-variable/outfit';
 import '@fontsource-variable/fraunces';
 import './styles/global.css';
 import App from './App';
+import { IS_ARTIFACT, initHost } from './lib/host';
+
+void initHost();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -12,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // Offline support — register the service worker in production builds.
-if (import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureContext) {
+if (import.meta.env.PROD && !IS_ARTIFACT && 'serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       /* offline mode unavailable — the app still works online */

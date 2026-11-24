@@ -157,3 +157,25 @@ export function LevelUp() {
     </Modal>
   );
 }
+
+/* ---------- Confirm dialog ---------- */
+export function ConfirmHost() {
+  const [req, setReq] = useState<Extract<AppEvent, { type: 'confirm' }> | null>(null);
+  useEffect(() => on((e) => { if (e.type === 'confirm') setReq(e); }), []);
+  const close = (v: boolean) => {
+    req?.resolve(v);
+    setReq(null);
+  };
+  return (
+    <Modal open={!!req} onClose={() => close(false)} label="Confirm">
+      <div className="stack">
+        <div className="h3">{req?.message}</div>
+        {req?.detail && <div className="soft small">{req.detail}</div>}
+        <div className="row end">
+          <button className="btn ghost" onClick={() => close(false)}>Cancelar</button>
+          <button className={`btn ${req?.danger ? 'bad' : 'primary'}`} onClick={() => close(true)} autoFocus>{req?.ok}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

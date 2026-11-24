@@ -3,7 +3,8 @@ import { Download, Eye, EyeOff, KeyRound, Loader2, Upload, Trash2, Volume2, Spar
 import { useStore } from '../lib/store';
 import { loadVoices, spanishVoices, ttsSupported } from '../lib/speech';
 import { AI_MODELS, streamChat } from '../lib/ai';
-import { toast } from '../lib/events';
+import { toast, askConfirm } from '../lib/events';
+import { IS_ARTIFACT, getHost, useHost } from '../lib/host';
 import { PageHead, Switch, say } from '../components/ui';
 
 function Row({ title, desc, children }: { title: string; desc?: ReactNode; children: ReactNode }) {
@@ -35,6 +36,7 @@ export default function Settings() {
   const [testing, setTesting] = useState(false);
   const [install, setInstall] = useState<BeforeInstallPromptEvent | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const host = useHost();
 
   useEffect(() => {
     void loadVoices().then(() => setVoices(spanishVoices()));
@@ -68,7 +70,21 @@ export default function Settings() {
     }
   };
 
-  const download = () => {
+  const download = async () => {
+    if (IS_ARTIFACT) {
+      const dl = getHost().downloads;
+      if (!dl) {
+        toast('Saving files isn’t available in this view.', '⚠️', 'error');
+        return;
+      }
+      try {
+        const r = await dl.save({ filename: `spenish-backup-${new Date().toISOString().slice(0, 10)}.json`, data: exportData() });
+        if (r.status === 'saved') toast('Backup saved', '💾', 'success');
+      } catch (e) {
+        if ((e as { code?: string })?.code !== 'cancelled') toast('The backup wasn’t saved.', '⚠️', 'error');
+      }
+      return;
+    }
     const blob = new Blob([exportData()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -131,6 +147,23 @@ export default function Settings() {
         </div>
       </section>
 
+      {IS_ARTIFACT ? (
+      <section className="card mt">
+        <div className="card-title"><Sparkles /> Inteligencia artificial (Claude)</div>
+        <p className="small soft" style={{ marginTop: 0 }}>
+          In this preview, Claude is built in: Profe Lupita, AI translations and photo reading use your own Claude account, with no API key.
+          The first time, you’ll be asked to allow it.
+        </p>
+        <div className="row">{host.sample ? <span className="chip ok"><Check /> Claude disponible</span> : <span className="chip warn">{host.ready ? 'Claude isn’t available in this view' : 'Conectando…'}</span>}</div>
+        <div className="list mt">
+          <Row title="Motor de traducción" desc="Auto uses Claude here, with the offline dictionary as a fallback.">
+            <div className="seg">
+              {(['auto', 'ai', 'offline'] as const).map((e) => <button key={e} className={s.engine === e ? 'on' : ''} onClick={() => set({ engine: e })}>{{ auto: 'Auto', ai: 'IA', offline: 'Offline' }[e]}</button>)}
+            </div>
+          </Row>
+        </div>
+      </section>
+      ) : (
       <section className="card mt">
         <div className="card-title"><Sparkles /> Inteligencia artificial (Claude)</div>
         <p className="small soft" style={{ marginTop: 0 }}>
@@ -163,6 +196,7 @@ export default function Settings() {
           </Row>
         </div>
       </section>
+      )}
 
       <section className="card mt">
         <div className="card-title">🎨 Apariencia y aprendizaje</div>
@@ -201,9 +235,9 @@ export default function Settings() {
           <button className="btn sm" onClick={() => fileRef.current?.click()}><Upload /> Importar</button>
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => onImport(e.target.files?.[0])} />
           {install && <button className="btn sm primary" onClick={async () => { await install.prompt(); setInstall(null); }}><Smartphone /> Instalar app</button>}
-          <button className="btn sm bad" style={{ marginLeft: 'auto' }} onClick={() => { if (confirm('Reset ALL progress, cards and history? This cannot be undone.')) { resetAll(); toast('Progress reset', '🧹'); } }}><Trash2 /> Reiniciar todo</button>
+          <button className="btn sm bad" style={{ marginLeft: 'auto' }} onClick={async () => { if (await askConfirm('¿Reiniciar todo?', { detail: 'This erases all progress, flashcards and history on this device. It cannot be undone.', ok: 'Reiniciar', danger: true })) { resetAll(); toast('Progress reset', '🧹'); } }}><Trash2 /> Reiniciar todo</button>
         </div>
-        {!install && <div className="tiny muted mt">📱 Install: on iPhone tap Share → “Add to Home Screen”; on Android/desktop Chrome use the install icon in the address bar.</div>}
+        {!install && !IS_ARTIFACT && <div className="tiny muted mt">📱 Install: on iPhone tap Share → “Add to Home Screen”; on Android/desktop Chrome use the install icon in the address bar.</div>}
       </section>
 
       <section className="card mt">

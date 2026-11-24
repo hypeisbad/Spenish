@@ -3,6 +3,7 @@
  *   Claude (if an API key is set and AI mode is on) → Google → MyMemory (es-MX) → offline lexicon.
  */
 import { aiTranslate, type AiTranslation } from './ai';
+import { aiAvailable } from './host';
 import { detectLanguage, sentences } from './text';
 import { offlineTranslate } from '../data/lexicon';
 import { SPAIN_TO_MX_HINTS } from '../data/slang';
@@ -145,10 +146,10 @@ export async function translate(text: string, opts: TranslateOptions): Promise<T
     throw new Error('No offline match. Switch to Online or AI mode for full translations.');
   }
 
-  if ((opts.engine === 'ai' || opts.engine === 'auto') && opts.aiKey) {
+  if ((opts.engine === 'ai' || opts.engine === 'auto') && aiAvailable(opts.aiKey ?? '')) {
     try {
       const r: AiTranslation = await aiTranslate({
-        apiKey: opts.aiKey,
+        apiKey: opts.aiKey ?? '',
         model: opts.aiModel ?? 'claude-opus-5-5',
         text: clean,
         from,

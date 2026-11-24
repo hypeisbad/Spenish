@@ -7,7 +7,7 @@ import { buildLesson, checkBuild, firstEn, type Ex } from '../lib/exercises';
 import { checkAnswer, wordMatch, shuffle } from '../lib/text';
 import { sttSupported } from '../lib/speech';
 import { useStore } from '../lib/store';
-import { emit } from '../lib/events';
+import { emit, askConfirm } from '../lib/events';
 import { haptic, sfx } from '../lib/sound';
 import { AccentBar, MicButton, SpeakButton, say, Empty } from '../components/ui';
 
@@ -469,7 +469,7 @@ function LessonTop({ progress, combo, title }: { progress: number; combo: number
   return (
     <div className="stack sm" style={{ marginBottom: 16 }}>
       <div className="row between nowrap">
-        <button className="btn icon sm ghost" onClick={() => { if (confirm('¿Salir de la lección? Your progress in this lesson will be lost.')) navigate('/learn'); }} aria-label="Exit lesson"><X /></button>
+        <button className="btn icon sm ghost" onClick={async () => { if (await askConfirm('¿Salir de la lección?', { detail: 'Your progress in this lesson will be lost.', ok: 'Salir' })) navigate('/learn'); }} aria-label="Exit lesson"><X /></button>
         <div className="small soft grow" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
         {combo >= 2 ? <span className="chip accent pulse"><Flame /> x{combo}</span> : <span className="chip" aria-hidden><Ear /></span>}
       </div>

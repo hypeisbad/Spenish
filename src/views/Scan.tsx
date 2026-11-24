@@ -4,9 +4,10 @@ import { useStore } from '../lib/store';
 import { aiReadImage, type VisionResult } from '../lib/ai';
 import { translate } from '../lib/translate';
 import { toast } from '../lib/events';
+import { IS_ARTIFACT, useAiAvailable } from '../lib/host';
 import { PageHead, SaveButton, SpeakButton } from '../components/ui';
 
-async function downscale(file: File, max = 1568): Promise<{ dataUrl: string; base64: string }> {
+async function downscale(file: File, max = 1568): Promise<{ dataUrl: string; base64: string; blob: Blob }> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((res, rej) => {
@@ -25,7 +26,8 @@ async function downscale(file: File, max = 1568): Promise<{ dataUrl: string; bas
     if (!ctx) throw new Error('Canvas unavailable');
     ctx.drawImage(img, 0, 0, w, h);
     const dataUrl = c.toDataURL('image/jpeg', 0.86);
-    return { dataUrl, base64: dataUrl.split(',')[1] };
+    const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image'))), 'image/jpeg', 0.86));
+    return { dataUrl, base64: dataUrl.split(',')[1], blob };
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -36,14 +38,14 @@ type TesseractModule = { recognize: (img: string, langs: string, opts?: { logger
 export default function Scan() {
   const settings = useStore((s) => s.settings);
   const addXp = useStore((s) => s.addXp);
-  const [img, setImg] = useState<{ dataUrl: string; base64: string } | null>(null);
+  const [img, setImg] = useState<{ dataUrl: string; base64: string; blob: Blob } | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string>('');
   const [vision, setVision] = useState<VisionResult | null>(null);
   const [ocr, setOcr] = useState<{ text: string; translation: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
-  const hasKey = !!settings.aiKey;
+  const hasKey = useAiAvailable(settings.aiKey);
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -58,14 +60,15 @@ export default function Scan() {
     }
   };
 
-  const process = async (d: { dataUrl: string; base64: string }, forceOcr = false) => {
+  const process = async (d: { dataUrl: string; base64: string; blob: Blob }, forceOcr = false) => {
     setBusy(true);
     try {
       if (hasKey && !forceOcr) {
         setProgress('Profe Lupita está leyendo la imagen…');
-        const r = await aiReadImage({ apiKey: settings.aiKey, model: settings.aiModel, base64: d.base64, mediaType: 'image/jpeg' });
+        const r = await aiReadImage({ apiKey: settings.aiKey, model: settings.aiModel, base64: d.base64, blob: d.blob, mediaType: 'image/jpeg' });
         setVision(r);
       } else {
+        if (IS_ARTIFACT) throw new Error('Reading photos needs Claude, which isn’t available in this view.');
         setProgress('Cargando OCR en el dispositivo…');
         const url = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js';
         const mod = (await import(/* @vite-ignore */ url)) as { default: TesseractModule };
@@ -120,12 +123,12 @@ export default function Scan() {
           <div className="row mt">
             <button className="btn primary" onClick={() => camRef.current?.click()}><Camera /> Tomar foto</button>
             <button className="btn" onClick={() => fileRef.current?.click()}><ImagePlus /> Elegir imagen</button>
-            {img && hasKey && <button className="btn sm ghost" disabled={busy} onClick={() => process(img, true)}><ScanText /> Use on-device OCR</button>}
+            {img && hasKey && !IS_ARTIFACT && <button className="btn sm ghost" disabled={busy} onClick={() => process(img, true)}><ScanText /> Use on-device OCR</button>}
           </div>
           <div className={`callout mt ${hasKey ? 'mx' : ''}`}>
             {hasKey ? <Sparkles style={{ width: 18, flex: 'none' }} /> : <KeyRound style={{ width: 18, flex: 'none' }} />}
             <span className="small">
-              {hasKey ? 'Using Claude Vision — best for menus, handwriting and context.' : <>On-device OCR mode. <a href="#/settings">Add a Claude API key</a> for smarter reading with dish explanations.</>}
+              {hasKey ? 'Using Claude Vision — best for menus, handwriting and context.' : IS_ARTIFACT ? 'Reading photos needs Claude, which isn’t available in this view.' : <>On-device OCR mode. <a href="#/settings">Add a Claude API key</a> for smarter reading with dish explanations.</>}
             </span>
           </div>
         </div>
